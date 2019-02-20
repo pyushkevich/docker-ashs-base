@@ -56,7 +56,7 @@ fi
 # Notify ticket that we started processing (because we may be rerunning)
 itksnap-wt \
   -dssp-tickets-log $TICKET_ID info "Starting ticket processing in container $(hostname)" \
-  -dssp-tickets-progress $TICKET_ID 0 1 0
+  -dssp-tickets-set-progress $TICKET_ID 0 1 0
 
 if [[ $? -ne 0 ]]; then
   fail_ticket $TICKET_ID "Failed to update ticket properties"
