@@ -76,7 +76,7 @@ fi
 
 # Provide callback info for ASHS to update progress and send log messages
 export ASHS_ROOT
-export ASHS_HOOK_SCRIPT=ashs_alfabis_hook.sh
+export ASHS_HOOK_SCRIPT=$(dirname $(readlink -m $0))/ashs_alfabis_hook.sh
 export ASHS_HOOK_DATA=$TICKET_ID
 
 # The 8-digit ticket id string
