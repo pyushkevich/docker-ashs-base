@@ -5,6 +5,26 @@ set -x -e
 # = Script to run ASHS for DSS ticket =
 # =====================================
 
+# Create a temporary directory for this process
+if [[ ! $TMPDIR ]]; then
+  TMPDIR=$(mktemp -d /tmp/ashs_daemon.XXXXXX) || exit 1
+fi
+
+
+# This function uploads the logs from ASHS to the server
+function upload_logs()
+{
+  local ticket_id=${1?}
+  local workdir=${2?}
+  local tarball=$TMPDIR/ashs_ticket_$(printf %08d $ticket_id).tgz
+  tar -czvf $tarball $workdir/dump/*
+
+  if [[ -d $workdir/dump ]]; then
+    itksnap-wt -dssp-tickets-attach $ticket_id "ASHS logs" $tarball "application/x-tgz"
+    itksnap-wt -dssp-tickets-log info "ASHS execution logs uploaded"
+  fi
+}
+
 # This function sends an error message to the server
 function fail_ticket()
 {
@@ -30,11 +50,6 @@ while getopts "r:a:t:s:w:k:" opt; do
 
   esac
 done
-
-# Create a temporary directory for this process
-if [[ ! $TMPDIR ]]; then
-  TMPDIR=$(mktemp -d /tmp/ashs_daemon.XXXXXX) || exit 1
-fi
 
 # Set the working directory
 WORKDIR=$WORKDIR_BASE/$(printf ticket_%08d $TICKET_ID)
@@ -77,13 +92,13 @@ itksnap-wt -i $WSFILE -ll
 # Get the layer tagged T1
 T1_FILE=$(itksnap-wt -P -i $WSFILE -llf T1-MRI)
 if [[ $(echo $T1_FILE | wc -w) -ne 1 || ! -f $T1_FILE ]]; then
-  fail_ticket $TICKET_ID "Missing tag 'T1' in ticket workspace"
+  fail_ticket $TICKET_ID "Missing tag 'T1-MRI' in ticket workspace"
 fi
 
 # Get the layer tagged T2
 T2_FILE=$(itksnap-wt -P -i $WSFILE -llf T2-MRI)
 if [[ $(echo $T2_FILE | wc -w) -ne 1 || ! -f $T2_FILE ]]; then
-  fail_ticket $TICKET_ID "Missing tag 'T2' in ticket workspace"
+  fail_ticket $TICKET_ID "Missing tag 'T2-MRI' in ticket workspace"
 fi
 
 # Provide callback info for ASHS to update progress and send log messages
@@ -102,10 +117,17 @@ $ASHS_ROOT/bin/ashs_main.sh \
   -I $IDSTRING \
   -H -P 
 
+# Return code
+ASHS_RC=$?
+
+# Upload the logs
+upload_logs $TICKET_ID $WORKDIR/ashs
+
 # Check the error code
-if [[ $? -ne 0 ]]; then
+if [[ $ASHS_RC -ne 0 ]]; then
   # TODO: we need to supply some debugging information, this is not enough
   # ASHS crashed - report the error
+  upload_logs $TICKET_ID $WORKDIR/ashs
   fail_ticket $TICKET_ID "ASHS execution failed"
 fi
 
