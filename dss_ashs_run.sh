@@ -55,11 +55,11 @@ fi
 
 # Notify ticket that we started processing (because we may be rerunning)
 itksnap-wt \
-  -dssp-tickets-log $TICKET_ID status "Starting ticket processing in container $(hostname)" \
+  -dssp-tickets-log $TICKET_ID info "Starting ticket processing in container $(hostname)" \
   -dssp-tickets-progress $TICKET_ID 0 1 0
 
 if [[ $? -ne 0 ]]; then
-  fail_ticket $TICKET_ID "Failed to set status of ticket"
+  fail_ticket $TICKET_ID "Failed to update ticket properties"
 fi
 
 # Download the ticket
@@ -134,7 +134,7 @@ if [[ $? -ne 0 ]]; then
 fi
 
 # Set the log (ticket uploaded)
-itksnap-wt -dssp-tickets-log $TICKET_ID status "Uploaded result workspace"
+itksnap-wt -dssp-tickets-log $TICKET_ID info "Uploaded result workspace"
 
 # Set the result to success
 itksnap-wt -dssp-tickets-success $TICKET_ID
