@@ -16,6 +16,7 @@ function fail_ticket()
 }
 
 # Read the command-line arguments
+unset ASHS_ROOT ASHS_ATLAS TICKET_ID SERVER WORKDIR_BASE TOKEN
 while getopts "r:a:t:s:w:k:" opt; do
 
   case $opt in
@@ -42,12 +43,23 @@ WORKDIR=$WORKDIR_BASE/$(printf ticket_%08d $TICKET_ID)
 PATH=$ASHS_ROOT/ext/Linux/bin:$PATH
 
 # Login with provided token
-itksnap-wt -dss-auth $SERVER <<< $TOKEN
+if [[ $SERVER && $TOKEN ]]; then
+  itksnap-wt -dss-auth $SERVER <<< $TOKEN
+fi
 
 # If unable to login, exit
 if [[ $? -ne 0 ]]; then
   echo "Failed to login"
   exit -1
+fi
+
+# Notify ticket that we started processing (because we may be rerunning)
+itksnap-wt \
+  -dssp-tickets-log $TICKET_ID status "Starting ticket processing in container $(hostname)" \
+  -dssp-tickets-progress $TICKET_ID 0 1 0
+
+if [[ $? -ne 0 ]]; then
+  fail_ticket $TICKET_ID "Failed to set status of ticket"
 fi
 
 # Download the ticket
@@ -115,11 +127,14 @@ itksnap-wt -i $WSFILE \
   -labels-add $ASHS_ATLAS/snap/snaplabels.txt 0 "Left %s" \
   -labels-add $ASHS_ATLAS/snap/snaplabels.txt 100 "Right %s" \
   -o $WORKDIR/${IDSTRING}_results.itksnap \
-  -dssp-tickets-upload $TICKET_ID
+  -dssp-tickets-upload $TICKET_ID 
 
 if [[ $? -ne 0 ]]; then
   fail_ticket $TICKET_ID "Failed to upload ticket"
 fi
+
+# Set the log (ticket uploaded)
+itksnap-wt -dssp-tickets-log $TICKET_ID status "Uploaded result workspace"
 
 # Set the result to success
 itksnap-wt -dssp-tickets-success $TICKET_ID
