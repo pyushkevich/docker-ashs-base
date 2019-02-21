@@ -10,7 +10,6 @@ if [[ ! $TMPDIR ]]; then
   TMPDIR=$(mktemp -d /tmp/ashs_daemon.XXXXXX) || exit 1
 fi
 
-
 # This function uploads the logs from ASHS to the server
 function upload_logs()
 {
@@ -21,7 +20,7 @@ function upload_logs()
 
   if [[ -d $workdir/dump ]]; then
     itksnap-wt -dssp-tickets-attach $ticket_id "ASHS logs" $tarball "application/x-tgz"
-    itksnap-wt -dssp-tickets-log info "ASHS execution logs uploaded"
+    itksnap-wt -dssp-tickets-log $ticket_id info "ASHS execution logs uploaded"
   fi
 }
 
