@@ -15,11 +15,19 @@ function upload_logs()
 {
   local ticket_id=${1?}
   local workdir=${2?}
-  local tarball=$TMPDIR/ashs_ticket_$(printf %08d $ticket_id).tgz
-  tar -czvf $tarball $workdir/dump/*
+  local markdown=$TMPDIR/ashs_ticket_$(printf %08d $ticket_id).md
+
+  # Generate the file
+  echo "# ASHS log for ticket 123" > $markdown
+  for fn in $(ls); do
+    echo "## $fn"
+    echo '```console'
+    cat $fn
+    echo '```'
+  done >> $markdown
 
   if [[ -d $workdir/dump ]]; then
-    itksnap-wt -dssp-tickets-attach $ticket_id "ASHS logs" $tarball "application/x-tgz"
+    itksnap-wt -dssp-tickets-attach $ticket_id "ASHS execution log" $markdown "text/markdown"
     itksnap-wt -dssp-tickets-log $ticket_id info "ASHS execution logs uploaded"
   fi
 }
