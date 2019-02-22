@@ -1,4 +1,5 @@
 #!/bin/bash
+# vim: set ts=2 sw=2 expandtab :
 set -x -e
 
 # =====================================
@@ -15,21 +16,31 @@ function upload_logs()
 {
   local ticket_id=${1?}
   local workdir=${2?}
-  local markdown=$TMPDIR/ashs_ticket_$(printf %08d $ticket_id).md
+  local html=$TMPDIR/ashs_ticket_$(printf %08d $ticket_id).html
 
   if [[ -d $workdir/dump ]]; then
 
-    # Generate the file
-    echo "# ASHS log for ticket 123" > $markdown
+  # Generate the file
+  cat > $html <<-HTMLHEAD
+		<!doctype html>
+		<html lang="en">
+		<head>
+		  <meta charset="utf-8">
+		  <title>ASHS log for ticket $ticket_id</title>
+		</head>
+		<body>
+		<h1>ASHS log for ticket $ticket_id</h1>
+		HTMLHEAD
+
     for fn in $(ls $workdir/dump); do
-      echo "## $fn"
-      echo '```console'
+      echo "<h2>$fn</h2>"
+      echo "<code>"
       cat $workdir/dump/$fn
-      echo '```'
-    done >> $markdown
+      echo "</code>"
+    done >> $html
 
     # Upload the log
-    itksnap-wt -dssp-tickets-attach $ticket_id "ASHS execution log" $markdown "text/markdown"
+    itksnap-wt -dssp-tickets-attach $ticket_id "ASHS execution log" $html "text/html"
     itksnap-wt -dssp-tickets-log $ticket_id info "ASHS execution logs uploaded"
   fi
 }
