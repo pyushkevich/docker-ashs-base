@@ -17,16 +17,18 @@ function upload_logs()
   local workdir=${2?}
   local markdown=$TMPDIR/ashs_ticket_$(printf %08d $ticket_id).md
 
-  # Generate the file
-  echo "# ASHS log for ticket 123" > $markdown
-  for fn in $(ls); do
-    echo "## $fn"
-    echo '```console'
-    cat $fn
-    echo '```'
-  done >> $markdown
-
   if [[ -d $workdir/dump ]]; then
+
+    # Generate the file
+    echo "# ASHS log for ticket 123" > $markdown
+    for fn in $(ls $workdir/dump); do
+      echo "## $fn"
+      echo '```console'
+      cat $workdir/$fn
+      echo '```'
+    done >> $markdown
+
+    # Upload the log
     itksnap-wt -dssp-tickets-attach $ticket_id "ASHS execution log" $markdown "text/markdown"
     itksnap-wt -dssp-tickets-log $ticket_id info "ASHS execution logs uploaded"
   fi
