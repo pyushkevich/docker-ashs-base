@@ -24,7 +24,7 @@ function upload_logs()
     for fn in $(ls $workdir/dump); do
       echo "## $fn"
       echo '```console'
-      cat $workdir/$fn
+      cat $workdir/dump/$fn
       echo '```'
     done >> $markdown
 
