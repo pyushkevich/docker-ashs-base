@@ -14,7 +14,7 @@ RUN apt-get install -y curl git parallel imagemagick
 WORKDIR /app
 
 # Download the current build of ASHS
-RUN git clone -b fastashs_beta https://github.com/pyushkevich/ashs.git ashs
+COPY ./ashs /app/
 
 # Copy the current scriptlet
 COPY . /app/

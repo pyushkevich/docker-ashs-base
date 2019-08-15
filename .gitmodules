@@ -1,0 +1,4 @@
+[submodule "ashs"]
+	path = ashs
+	url = https://github.com/pyushkevich/ashs.git
+	branch = fastashs_beta
