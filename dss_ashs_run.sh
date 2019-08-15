@@ -8,7 +8,7 @@ set -x
 
 # Create a temporary directory for this process
 if [[ ! $TMPDIR ]]; then
-  TMPDIR=$(mktemp -d /tmp/ashs_daemon.XXXXXX) || exit 1
+  TMPDIR=$(mktemp -d /tmp/ashs_daemon.XXXXXX) || exit -1
 fi
 
 # This function uploads the logs from ASHS to the server
@@ -45,14 +45,15 @@ function upload_logs()
   fi
 }
 
-# This function sends an error message to the server
+# This function sends an error message to the server. The job itself exits with a 
+# zero return code, so that Kube does not try scheduling it again
 function fail_ticket()
 {
   local ticket_id=${1?}
   local message=${2?}
 
   itksnap-wt -dssp-tickets-fail $ticket_id "$message"
-  exit -1
+  exit 0
 }
 
 # Read the command-line arguments
