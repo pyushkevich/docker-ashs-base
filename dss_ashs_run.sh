@@ -1,6 +1,6 @@
 #!/bin/bash
 # vim: set ts=2 sw=2 expandtab :
-set -x -e
+set -x
 
 # =====================================
 # = Script to run ASHS for DSS ticket =
@@ -115,12 +115,6 @@ if [[ $(echo $T1_FILE | wc -w) -ne 1 || ! -f $T1_FILE ]]; then
   fail_ticket $TICKET_ID "Missing tag 'T1-MRI' in ticket workspace"
 fi
 
-# Get the layer tagged T2
-T2_FILE=$(itksnap-wt -P -i $WSFILE -llf T2-MRI)
-if [[ $(echo $T2_FILE | wc -w) -ne 1 || ! -f $T2_FILE ]]; then
-  fail_ticket $TICKET_ID "Missing tag 'T2-MRI' in ticket workspace"
-fi
-
 # Provide callback info for ASHS to update progress and send log messages
 export ASHS_ROOT
 export ASHS_HOOK_SCRIPT=$(dirname $(readlink -m $0))/ashs_alfabis_hook.sh
@@ -129,13 +123,30 @@ export ASHS_HOOK_DATA=$TICKET_ID
 # The 8-digit ticket id string
 IDSTRING=$(printf %08d $TICKET_ID)
 
+# Check the resolution of the T1w MRI
+# if the resolution of LR and UI directions are smaller than 0.7, skip the SR stage
+DIM=($(c3d $T1_FILE -swapdim RPI -info-full | grep 'Spacing' | sed -e "s/.*\[//g" -e "s/,/ /g" -e "s/\].*//g"))
+DIMX=${DIM[0]}
+DIMY=${DIM[1]}
+DIMZ=${DIM[2]}
+echo "Image Dimensions: $DIMX, $DIMY, $DIMZ"
+
+if [[ $(echo "$DIMX <= 0.7 && $DIMZ <= 0.7" | bc) == 1 ]]; then
+  ASHS_CONFIG=ashs_user_config_noSR.sh
+else
+  ASHS_CONFIG=ashs_user_config.sh
+fi
+
+
 # Ready to roll!
 $ASHS_ROOT/bin/ashs_main.sh \
   -a $ASHS_ATLAS \
-  -g $T1_FILE -f $T2_FILE \
+  -C $ASHS_ATLAS/$ASHS_CONFIG \
+  -g $T1_FILE -f $T1_FILE \
   -w $WORKDIR/ashs \
   -I $IDSTRING \
-  -H -P 
+  -H -P \
+	-m identity.mat -M
 
 # Return code
 ASHS_RC=$?
@@ -160,16 +171,30 @@ for what in heur corr_usegray corr_nogray; do
     -o $WORKDIR/${IDSTRING}_lfseg_${what}.nii.gz
 done
 
-# Create a new workspace
-itksnap-wt -i $WSFILE \
-  -las $WORKDIR/${IDSTRING}_lfseg_corr_usegray.nii.gz -psn "JLF/CL result" \
-  -las $WORKDIR/${IDSTRING}_lfseg_corr_nogray.nii.gz -psn "JLF/CL-lite result" \
-  -las $WORKDIR/${IDSTRING}_lfseg_heur.nii.gz -psn "JLF result" \
-  -labels-clear \
-  -labels-add $ASHS_ATLAS/snap/snaplabels.txt 0 "Left %s" \
-  -labels-add $ASHS_ATLAS/snap/snaplabels.txt 100 "Right %s" \
-  -o $WORKDIR/${IDSTRING}_results.itksnap \
-  -dssp-tickets-upload $TICKET_ID 
+if [[ $(echo "$DIMX <= 0.7 && $DIMZ <= 0.7" | bc) == 1 ]]; then
+
+  itksnap-wt -i $WSFILE \
+    -layers-set-main $T1_FILE -psn "Original T1 scan" \
+    -las $WORKDIR/${IDSTRING}_lfseg_heur.nii.gz -psn "JLF result" \
+    -labels-clear \
+    -labels-add $ASHS_ATLAS/snap/snaplabels.txt 0 "Left %s" \
+    -labels-add $ASHS_ATLAS/snap/snaplabels.txt 100 "Right %s" \
+		-o $WORKDIR/${IDSTRING}_results.itksnap \
+		-dssp-tickets-upload $TICKET_ID 
+
+else
+
+  itksnap-wt -i $WSFILE \
+    -layers-set-main $WORKDIR/ashs/tse.nii.gz -psn "Super-resolution upsampled T1 scan" \
+    -layers-add-anat $T1_FILE -psn "Original T1 scan" \
+    -las $WORKDIR/${IDSTRING}_lfseg_heur.nii.gz -psn "JLF result" \
+    -labels-clear \
+    -labels-add $ASHS_ATLAS/snap/snaplabels.txt 0 "Left %s" \
+    -labels-add $ASHS_ATLAS/snap/snaplabels.txt 100 "Right %s" \
+		-o $WORKDIR/${IDSTRING}_results.itksnap \
+		-dssp-tickets-upload $TICKET_ID 
+
+fi
 
 if [[ $? -ne 0 ]]; then
   fail_ticket $TICKET_ID "Failed to upload ticket"
