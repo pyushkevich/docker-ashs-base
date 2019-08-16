@@ -1,6 +1,6 @@
 #!/bin/bash
 # vim: set ts=2 sw=2 expandtab :
-set -x -e
+set -x
 
 # =====================================
 # = Script to run ASHS for DSS ticket =
