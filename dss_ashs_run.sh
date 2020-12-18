@@ -59,7 +59,12 @@ function fail_ticket()
 
 # Read the command-line arguments
 unset ASHS_ROOT ASHS_ATLAS TICKET_ID SERVER WORKDIR_BASE TOKEN ICV_ATLAS
-while getopts "r:a:t:s:w:k:I:" opt; do
+TAG_T1="T1-MRI"
+TAG_T2="T2-MRI"
+SHIFT_LEFT=0
+SHIFT_RIGHT=100
+SHIFT_ICV=200
+while getopts "r:a:t:s:w:k:I:g:f:R:L:J:" opt; do
 
   case $opt in
 
@@ -70,6 +75,11 @@ while getopts "r:a:t:s:w:k:I:" opt; do
     w) WORKDIR_BASE=$OPTARG;;
     k) TOKEN=$OPTARG;;
     I) ICV_ATLAS=$OPTARG;;
+    g) TAG_T1=$OPTARG;;
+    f) TAG_T2=$OPTARG;;
+    R) SHIFT_LEFT=$OPTARG;;
+    L) SHIFT_RIGHT=$OPTARG;;
+    J) SHIFT_ICV=$OPTARG;;
 
   esac
 done
@@ -113,15 +123,15 @@ WSFILE=$(cat $TMPDIR/download.txt | grep '^1>.*itksnap$' | sed -e "s/^1> //")
 itksnap-wt -i $WSFILE -ll
 
 # Get the layer tagged T1
-T1_FILE=$(itksnap-wt -P -i $WSFILE -llf T1-MRI)
+T1_FILE=$(itksnap-wt -P -i $WSFILE -llf $TAG_T1)
 if [[ $(echo $T1_FILE | wc -w) -ne 1 || ! -f $T1_FILE ]]; then
-  fail_ticket $TICKET_ID "Missing tag 'T1-MRI' in ticket workspace"
+  fail_ticket $TICKET_ID "Missing tag '$TAG_T1' in ticket workspace"
 fi
 
 # Get the layer tagged T2
-T2_FILE=$(itksnap-wt -P -i $WSFILE -llf T2-MRI)
+T2_FILE=$(itksnap-wt -P -i $WSFILE -llf $TAG_T2)
 if [[ $(echo $T2_FILE | wc -w) -ne 1 || ! -f $T2_FILE ]]; then
-  fail_ticket $TICKET_ID "Missing tag 'T2-MRI' in ticket workspace"
+  fail_ticket $TICKET_ID "Missing tag '$TAG_T2' in ticket workspace"
 fi
 
 # Provide callback info for ASHS to update progress and send log messages
@@ -163,8 +173,9 @@ fi
 for what in heur corr_usegray corr_nogray; do
   $ASHS_ROOT/ext/$(uname)/bin/c3d \
     $WORKDIR/ashs/final/${IDSTRING}_left_lfseg_${what}.nii.gz \
+    -shift $SHIFT_LEFT -replace $SHIFT_LEFT 0 \
     $WORKDIR/ashs/final/${IDSTRING}_right_lfseg_${what}.nii.gz \
-    -shift 100 -replace 100 0 -add \
+    -shift $SHIFT_RIGHT -replace $SHIFT_RIGHT 0 -add \
     -type uchar -o $WORKDIR/${IDSTRING}_lfseg_${what}.nii.gz
 done
 
@@ -174,8 +185,8 @@ itksnap-wt -i $WSFILE \
   -las $WORKDIR/${IDSTRING}_lfseg_corr_nogray.nii.gz -psn "JLF/CL-lite result" \
   -las $WORKDIR/${IDSTRING}_lfseg_heur.nii.gz -psn "JLF result" \
   -labels-clear \
-  -labels-add $ASHS_ATLAS/snap/snaplabels.txt 0 "Left %s" \
-  -labels-add $ASHS_ATLAS/snap/snaplabels.txt 100 "Right %s" \
+  -labels-add $ASHS_ATLAS/snap/snaplabels.txt $SHIFT_LEFT "Left %s" \
+  -labels-add $ASHS_ATLAS/snap/snaplabels.txt $SHIFT_RIGHT "Right %s" \
   -o $WORKDIR/${IDSTRING}_results.itksnap
 
 if [[ $? -ne 0 ]]; then
@@ -210,13 +221,13 @@ if [[ $ICV_ATLAS ]]; then
 
   # Add the ICV image to the project
   $ASHS_ROOT/ext/$(uname)/bin/c3d \
-    $WORKDIR/ashs/final/${IDSTRING}_left_lfseg_corr_nogray.nii.gz \
-    -shift 200 -replace 200 0 \
+    $WORKDIR/ashs_icv/final/${IDSTRING}_left_lfseg_corr_nogray.nii.gz \
+    -shift $SHIFT_ICV -replace $SHIFT_ICV 0 \
     -type uchar -o $WORKDIR/${IDSTRING}_icv.nii.gz
 
   itksnap-wt -i $WORKDIR/${IDSTRING}_results.itksnap \
     -las $WORKDIR/${IDSTRING}_icv.nii.gz -psn "ICV" \
-    -labels-add $ICV_ATLAS/snap/snaplabels.txt 200 "%s" \
+    -labels-add $ICV_ATLAS/snap/snaplabels.txt $SHIFT_ICV "%s" \
     -o $WORKDIR/${IDSTRING}_results.itksnap
 
   if [[ $? -ne 0 ]]; then
@@ -226,7 +237,7 @@ if [[ $ICV_ATLAS ]]; then
 fi
 
 # Upload the ticket
-itksnap-wt -i $WSFILE -dssp-tickets-upload $TICKET_ID 
+itksnap-wt -i $WORKDIR/${IDSTRING}_results.itksnap -dssp-tickets-upload $TICKET_ID
 
 if [[ $? -ne 0 ]]; then
   fail_ticket $TICKET_ID "Failed to upload ticket"
