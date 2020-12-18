@@ -16,6 +16,7 @@ function upload_logs()
 {
   local ticket_id=${1?}
   local workdir=${2?}
+  local product=${3?}
   local html=$TMPDIR/ashs_ticket_$(printf %08d $ticket_id).html
 
   if [[ -d $workdir/dump ]]; then
@@ -40,8 +41,8 @@ function upload_logs()
     done >> $html
 
     # Upload the log
-    itksnap-wt -dssp-tickets-attach $ticket_id "ASHS execution log" $html "text/html"
-    itksnap-wt -dssp-tickets-log $ticket_id info "ASHS execution logs uploaded"
+    itksnap-wt -dssp-tickets-attach $ticket_id "${product} execution log" $html "text/html"
+    itksnap-wt -dssp-tickets-log $ticket_id info "${product} execution logs uploaded"
   fi
 }
 
@@ -56,8 +57,8 @@ function fail_ticket()
 }
 
 # Read the command-line arguments
-unset ASHS_ROOT ASHS_ATLAS TICKET_ID SERVER WORKDIR_BASE TOKEN
-while getopts "r:a:t:s:w:k:" opt; do
+unset ASHS_ROOT ASHS_ATLAS TICKET_ID SERVER WORKDIR_BASE TOKEN ICV_ATLAS
+while getopts "r:a:t:s:w:k:I:" opt; do
 
   case $opt in
 
@@ -67,6 +68,7 @@ while getopts "r:a:t:s:w:k:" opt; do
     s) SERVER=$OPTARG;;
     w) WORKDIR_BASE=$OPTARG;;
     k) TOKEN=$OPTARG;;
+    I) ICV_ATLAS=$OPTARG;;
 
   esac
 done
@@ -124,7 +126,13 @@ fi
 # Provide callback info for ASHS to update progress and send log messages
 export ASHS_ROOT
 export ASHS_HOOK_SCRIPT=$(dirname $(readlink -m $0))/ashs_alfabis_hook.sh
-export ASHS_HOOK_DATA=$TICKET_ID
+
+# The hood data depends on whether we are doing ICV as part of the script
+if [[ $ICV_ATLAS ]]; then
+  export ASHS_HOOK_DATA="$TICKET_ID,ASHS,0.0,0.5"
+else
+  export ASHS_HOOK_DATA=$TICKET_ID
+fi
 
 # The 8-digit ticket id string
 IDSTRING=$(printf %08d $TICKET_ID)
@@ -141,13 +149,12 @@ $ASHS_ROOT/bin/ashs_main.sh \
 ASHS_RC=$?
 
 # Upload the logs
-upload_logs $TICKET_ID $WORKDIR/ashs
+upload_logs $TICKET_ID $WORKDIR/ashs ASHS
 
 # Check the error code
 if [[ $ASHS_RC -ne 0 ]]; then
   # TODO: we need to supply some debugging information, this is not enough
   # ASHS crashed - report the error
-  upload_logs $TICKET_ID $WORKDIR/ashs
   fail_ticket $TICKET_ID "ASHS execution failed"
 fi
 
@@ -157,7 +164,7 @@ for what in heur corr_usegray corr_nogray; do
     $WORKDIR/ashs/final/${IDSTRING}_left_lfseg_${what}.nii.gz \
     $WORKDIR/ashs/final/${IDSTRING}_right_lfseg_${what}.nii.gz \
     -shift 100 -replace 100 0 -add \
-    -o $WORKDIR/${IDSTRING}_lfseg_${what}.nii.gz
+    -type uchar -o $WORKDIR/${IDSTRING}_lfseg_${what}.nii.gz
 done
 
 # Create a new workspace
@@ -168,8 +175,57 @@ itksnap-wt -i $WSFILE \
   -labels-clear \
   -labels-add $ASHS_ATLAS/snap/snaplabels.txt 0 "Left %s" \
   -labels-add $ASHS_ATLAS/snap/snaplabels.txt 100 "Right %s" \
-  -o $WORKDIR/${IDSTRING}_results.itksnap \
-  -dssp-tickets-upload $TICKET_ID 
+  -o $WORKDIR/${IDSTRING}_results.itksnap
+
+if [[ $? -ne 0 ]]; then
+  fail_ticket $TICKET_ID "Failed to create a result workspace"
+fi
+
+# If requeting ICV, perform the similar processing
+if [[ $ICV_ATLAS ]]; then
+
+  export ASHS_HOOK_DATA="$TICKET_ID,ICV,0.5,0.5"
+
+  # Ready to roll!
+  $ASHS_ROOT/bin/ashs_main.sh \
+    -a $ICV_ATLAS \
+    -g $T1_FILE -f $T1_FILE \
+    -w $WORKDIR/ashs_icv \
+    -I $IDSTRING \
+    -H -P -B
+
+  # Return code
+  ASHS_RC=$?
+
+  # Upload the logs
+  upload_logs $TICKET_ID $WORKDIR/ashs_icv ASHS-ICV
+
+  # Check the error code
+  if [[ $ASHS_RC -ne 0 ]]; then
+    # TODO: we need to supply some debugging information, this is not enough
+    # ASHS crashed - report the error
+    fail_ticket $TICKET_ID "ASHS-ICV execution failed"
+  fi
+
+  # Add the ICV image to the project
+  $ASHS_ROOT/ext/$(uname)/bin/c3d \
+    $WORKDIR/ashs/final/${IDSTRING}_left_lfseg_corr_nogray.nii.gz \
+    -shift 200 -replace 200 0 \
+    -type uchar -o $WORKDIR/${IDSTRING}_icv.nii.gz
+
+  itksnap-wt -i $WORKDIR/${IDSTRING}_results.itksnap \
+    -las $WORKDIR/${IDSTRING}_icv.nii.gz -psn "ICV" \
+    -labels-add $ICV_ATLAS/snap/snaplabels.txt 200 "%s" \
+    -o $WORKDIR/${IDSTRING}_results.itksnap
+
+  if [[ $? -ne 0 ]]; then
+    fail_ticket $TICKET_ID "Failed to create a result workspace"
+  fi
+
+fi
+
+# Upload the ticket
+itksnap-wt -i $WSFILE -dssp-tickets-upload $TICKET_ID 
 
 if [[ $? -ne 0 ]]; then
   fail_ticket $TICKET_ID "Failed to upload ticket"
