@@ -123,13 +123,13 @@ WSFILE=$(cat $TMPDIR/download.txt | grep '^1>.*itksnap$' | sed -e "s/^1> //")
 itksnap-wt -i $WSFILE -ll
 
 # Get the layer tagged T1
-T1_FILE=$(itksnap-wt -P -i $WSFILE -llf $TAG_T1)
+T1_FILE=$WORKDIR/$(basename $(itksnap-wt -P -i $WSFILE -llf $TAG_T1))
 if [[ $(echo $T1_FILE | wc -w) -ne 1 || ! -f $T1_FILE ]]; then
   fail_ticket $TICKET_ID "Missing tag '$TAG_T1' in ticket workspace"
 fi
 
 # Get the layer tagged T2
-T2_FILE=$(itksnap-wt -P -i $WSFILE -llf $TAG_T2)
+T2_FILE=$WORKDIR/$(basename $(itksnap-wt -P -i $WSFILE -llf $TAG_T2))
 if [[ $(echo $T2_FILE | wc -w) -ne 1 || ! -f $T2_FILE ]]; then
   fail_ticket $TICKET_ID "Missing tag '$TAG_T2' in ticket workspace"
 fi
