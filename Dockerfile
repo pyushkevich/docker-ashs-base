@@ -1,5 +1,5 @@
 # Dockerfile for ASHS (fast-ashs) version
-FROM pyushkevich/itksnap:v3.8.0-beta
+FROM pyushkevich/itksnap:v3.8.2
 
 # Descriptor fields
 LABEL version="fastashs-1.0.0"
